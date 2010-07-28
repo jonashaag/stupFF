@@ -6,6 +6,13 @@ import time
 from itertools import chain
 from utils import *
 
+__all__ = (
+    'Options', 'AudioOptions', 'VideoOptions',
+    'FFmpegVideo', 'ConversionProcess'
+)
+
+# TODO: Event-driven/inheritance-"signal-methods"
+
 class SPECIAL:
     pass
 
@@ -101,12 +108,16 @@ class FFmpegVideo(object):
             stderr=subprocess.PIPE
         )
         proc.wait()
-        if proc.returncode:
-            raise OSError("FFmpeg returned with code %d" % proc.returncode)
+        returncode = proc.returncode
+        if returncode:
+            if not raise_ffmpeg_error(returncode, self):
+                from . import FFmpegError
+                raise FFmpegError("FFprobe returned with unknown code %d" % returncode)
         stderr = proc.stderr.read()
         self.fps = extract_fps(stderr)
         self.duration = extract_duration(stderr)
         self.width, self.height = extract_width_and_height(stderr)
+        self.bitrate = extract_bitrate(stderr)
 
     def exists(self):
         return os.path.exists(self.filename)
@@ -173,13 +184,15 @@ class ConversionProcess(subprocess.Popen):
                     current_frame,
                     self.original_video.total_number_of_frames
                 )
-        self.progress = 100
-        self.seconds_left = 0
+
+    @property
+    def was_successful(self):
+        assert self.finished()
+        return self.returncode == 0
 
     def finished(self):
         """ ``True`` if this process has ended and a ``returncode`` is set. """
-        self.poll()
-        return self.returncode is not None
+        return self.poll() is not None
 
     def seconds_left(self):
         """

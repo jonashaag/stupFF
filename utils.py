@@ -15,8 +15,14 @@ __all__ = (
     'extract_duration', 'extract_fps', 'extract_frame',
     'extract_width_and_height', 'extract_bitrate',
     'cached_property', 'StringIO', 'nice_percent',
-    'threadify'
+    'threadify', 'raise_ffmpeg_error'
 )
+
+
+def raise_ffmpeg_error(returncode, video):
+    if returncode == 234:
+        from . import FFmpegUnknownFileFormat
+        raise FFmpegUnknownFileFormat(video.filename)
 
 def threadify(daemon=False):
     """

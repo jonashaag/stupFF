@@ -1,5 +1,6 @@
 from __future__ import division
 from future_builtins import map
+from functools import wraps
 import re
 import threading
 try:
@@ -11,7 +12,8 @@ class _missing:
     pass
 
 __all__ = (
-    'parse_duration', 'parse_fps', 'parse_frame',
+    'extract_duration', 'extract_fps', 'extract_frame',
+    'extract_width_and_height', 'extract_bitrate',
     'cached_property', 'StringIO', 'nice_percent',
     'threadify'
 )
@@ -47,43 +49,65 @@ def threadify(daemon=False):
 def nice_percent(a, b):
     return int(a*100 // b)
 
-def parse_duration(ffmpeg_stderr, regex=re.compile('Duration:\s*([\d:]+)')):
+def uses_regex(regex, fallback=None):
+    regex = re.compile(regex)
+    def wrapper(func):
+        @wraps(func)
+        def decorator(ffmpeg_stderr):
+            match = regex.search(ffmpeg_stderr)
+            if match is None:
+                return fallback
+            return func(match)
+        return decorator
+    return wrapper
+
+@uses_regex('bitrate: (\d+)')
+def extract_bitrate(match):
+    """
+        >>> extract_bitrate("...blah...bitrate: 4242...blah...")
+        4242
+    """
+    return int(match.group(1))
+
+@uses_regex(',\s+(\d+)x(\d+),', fallback=(None, None))
+def extract_width_and_height(match):
+    """
+        >>> extract_width_and_height("...blah...,  42x32,...blah...")
+        (42, 32)
+    """
+    return int(match.group(1)), int(match.group(2))
+
+@uses_regex('Duration:\s*([\d:]+)')
+def extract_duration(match):
     """
     Returns the duration extracted from FFmpeg's stderr output in seconds::
 
-        >>> parse_duration("...blah...Duration:\t 02:17:22...blah...")
+        >>> extract_duration("...blah...Duration:\t 02:17:22...blah...")
         8242
     """
-    duration = regex.search(ffmpeg_stderr)
-    if duration is None:
-        return None
-    duration = duration.group(1)
+    duration = match.group(1)
     hours, minutes, seconds = map(int, duration.split(':'))
     return hours*3600 + minutes*60 + seconds
 
-def parse_fps(ffmpeg_stderr, regex=re.compile('(\d+) fps')):
+@uses_regex('(\d+) fps')
+def extract_fps(match):
     """
     Returns the fps extracted from FFmpeg's stderr output::
 
-        >>> parse_fps("...blah...42 fps...blah...")
+        >>> extract_fps("...blah...42 fps...blah...")
         42
     """
-    fps = regex.search(ffmpeg_stderr)
-    if fps is None:
-        return None
-    return int(fps.group(1))
+    return int(match.group(1))
 
-def parse_frame(ffmpeg_stderr, regex=re.compile('frame=\s*(\d+)')):
+@uses_regex('frame=\s*(\d+)')
+def extract_frame(match):
     """
     Returns the number of frames extracted from FFmpeg's stderr output::
 
-        >>> parse_frame("...blah...frame=\t 42...blah...")
+        >>> extract_frame("...blah...frame=\t 42...blah...")
         42
     """
-    frame = regex.search(ffmpeg_stderr)
-    if frame is None:
-        return None
-    return int(frame.group(1))
+    return int(match.group(1))
 
 class cached_property(object):
     """

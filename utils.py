@@ -53,7 +53,7 @@ def threadify(daemon=False):
     return wrapper
 
 def nice_percent(a, b):
-    return int(a*100 // b)
+    return min(100, int(a*100 // b))
 
 def uses_regex(regex, fallback=None):
     regex = re.compile(regex)
@@ -75,7 +75,7 @@ def extract_bitrate(match):
     """
     return int(match.group(1))
 
-@uses_regex(',\s+(\d+)x(\d+),', fallback=(None, None))
+@uses_regex(',\s+(\d+)x(\d+)', fallback=(None, None))
 def extract_width_and_height(match):
     """
         >>> extract_width_and_height("...blah...,  42x32,...blah...")

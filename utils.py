@@ -8,21 +8,51 @@ try:
 except ImportError:
     from StringIO import StringIO
 
-class _missing:
-    pass
-
 __all__ = (
     'extract_duration', 'extract_fps', 'extract_frame',
     'extract_width_and_height', 'extract_bitrate',
     'cached_property', 'StringIO', 'nice_percent',
-    'threadify', 'raise_ffmpeg_error'
+    'threadify', 'autosize'
 )
 
+def nice_percent(a, b):
+    return min(100, int(a*100 // b))
 
-def raise_ffmpeg_error(returncode, video):
-    if returncode == 234:
-        from . import FFmpegUnknownFileFormat
-        raise FFmpegUnknownFileFormat(video.filename)
+def autosize(video, max_width, max_height, digits=2):
+    """
+    Returns a tuple (width, height) chosen intelligently so that the
+    maximum values (given in ``max_width`` and ``max_height``)
+    are respected and the aspect ratio is preserved.
+
+    :param video: The ``FFmpegVideo`` that has the original
+                  ``width`` and ``height`` properties to do the calculation with.
+    :param int digits: Number of digits the resulting `width` and `height` shall
+                       be rounded to (or ``-1`` if no rounding shall be done)
+    """
+    aspect_ratio = video.width / video.height
+
+    # calculate the ratio of the video and would-be heights and widths
+    # and go on with the highest of the both.
+    if max_height and video.height >= max_height:
+        heights_ratio = video.height / max_height
+    else:
+        heights_ratio = -1
+    if max_width and video.width >= max_width:
+        widths_ratio = video.width / max_width
+    else:
+        widths_ratio = -1
+    if heights_ratio == widths_ratio == -1:
+        # do nothing. no maximums given that would matter in any way
+        w, h = video.width, video.height
+    else:
+        if heights_ratio > widths_ratio:
+            h, w = max_height, video.width / heights_ratio
+        else:
+            w, h = max_width, video.height / widths_ratio
+
+    if digits > 0:
+        w, h = round(w, digits), round(h, digits)
+    return w, h
 
 def threadify(daemon=False):
     """
@@ -52,10 +82,7 @@ def threadify(daemon=False):
         return decorator
     return wrapper
 
-def nice_percent(a, b):
-    return min(100, int(a*100 // b))
-
-def uses_regex(regex, fallback=None):
+def simple_extractor(regex, fallback=None):
     regex = re.compile(regex)
     def wrapper(func):
         @wraps(func)
@@ -67,7 +94,7 @@ def uses_regex(regex, fallback=None):
         return decorator
     return wrapper
 
-@uses_regex('bitrate: (\d+)')
+@simple_extractor('bitrate: (\d+)')
 def extract_bitrate(match):
     """
         >>> extract_bitrate("...blah...bitrate: 4242...blah...")
@@ -75,7 +102,7 @@ def extract_bitrate(match):
     """
     return int(match.group(1))
 
-@uses_regex(',\s+(\d+)x(\d+)', fallback=(None, None))
+@simple_extractor(',\s+(\d+)x(\d+)', fallback=(None, None))
 def extract_width_and_height(match):
     """
         >>> extract_width_and_height("...blah...,  42x32,...blah...")
@@ -83,7 +110,7 @@ def extract_width_and_height(match):
     """
     return int(match.group(1)), int(match.group(2))
 
-@uses_regex('Duration:\s*([\d:]+)')
+@simple_extractor('Duration:\s*([\d:]+)')
 def extract_duration(match):
     """
     Returns the duration extracted from FFmpeg's stderr output in seconds::
@@ -95,21 +122,17 @@ def extract_duration(match):
     hours, minutes, seconds = map(int, duration.split(':'))
     return hours*3600 + minutes*60 + seconds
 
-@uses_regex('(\d+) fps')
+@simple_extractor('(\d+) fps')
 def extract_fps(match):
     """
-    Returns the fps extracted from FFmpeg's stderr output::
-
         >>> extract_fps("...blah...42 fps...blah...")
         42
     """
     return int(match.group(1))
 
-@uses_regex('frame=\s*(\d+)')
+@simple_extractor('frame=\s*(\d+)')
 def extract_frame(match):
     """
-    Returns the number of frames extracted from FFmpeg's stderr output::
-
         >>> extract_frame("...blah...frame=\t 42...blah...")
         42
     """
@@ -120,19 +143,18 @@ class cached_property(object):
     A property that is lazily calculated and then cached.
     Stolen from Armin Ronacher's Logbook (http:/github.com/mitsuhiko/logbook)
     """
-    def __init__(self, func, name=None, doc=None):
-        self.__name__ = name or func.__name__
-        self.__module__ = func.__module__
-        self.__doc__ = doc or func.__doc__
+    _missing = object()
+
+    def __init__(self, func):
         self.func = func
 
     def __get__(self, obj, type=None):
         if obj is None:
             return self
-        value = obj.__dict__.get(self.__name__, _missing)
-        if value is _missing:
+        value = obj.__dict__.get(self.func.__name__, self._missing)
+        if value is self._missing:
             value = self.func(obj)
-            obj.__dict__[self.__name__] = value
+            obj.__dict__[self.func.__name__] = self.func(obj)
         return value
 
 if __name__ == '__main__':

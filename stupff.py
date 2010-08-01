@@ -7,9 +7,9 @@ from itertools import chain
 from commandline import AudioOptions, VideoOptions
 from utils import *
 
+
 class FFmpegError(Exception):
     pass
-
 
 class FFmpegSubprocess(subprocess.Popen):
     def __init__(self, *args, **kwargs):
@@ -29,7 +29,6 @@ class FFmpegSubprocess(subprocess.Popen):
             "%s exited with code '%d'" % \
             (self._procname, self.returncode)
         )
-
 
 class FFmpegVideo(object):
     fps = \

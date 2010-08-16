@@ -16,10 +16,13 @@ class Options(dict):
         ['-acodec', 'vp8', '-ab', '150000']
     """
     __getattr__ = dict.__getitem__
+    empty = ()
 
     @cached_property
     def as_commandline(self):
         if not self:
+            for item in self.empty:
+                yield item
             return
         for option, value in self.iteritems():
             ffmpeg_arg = self.OPTIONS[option]
@@ -29,6 +32,7 @@ class Options(dict):
             yield str(value)
 
 class AudioOptions(Options):
+    empty = ['-an'] # -an = no audio
     OPTIONS = dict(
         sample_rate='ar',
         bitrate='ab',
@@ -41,6 +45,7 @@ class VideoOptions(Options):
     OPTIONS = dict(
         bitrate='b',
         frame_rate='r',
+        frames='vframes',
         size='s',
         codec='vcodec',
         max_width=SPECIAL,

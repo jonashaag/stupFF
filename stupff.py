@@ -30,7 +30,7 @@ class FFmpegSubprocess(subprocess.Popen):
             (self._procname, self.returncode)
         )
 
-class FFmpegVideo(object):
+class FFmpegFile(object):
     fps = \
     duration = \
     bitrate = \
@@ -41,6 +41,7 @@ class FFmpegVideo(object):
         self.filename = filename
 
     def ffprobe(self):
+        self.ensure_exists()
         proc = FFmpegSubprocess(
             ['ffprobe', self.filename],
             stderr=subprocess.PIPE
@@ -54,6 +55,10 @@ class FFmpegVideo(object):
         self.bitrate = extract_bitrate(stderr)
         self.width, self.height = extract_width_and_height(stderr)
 
+    def ensure_exists(self):
+        if not os.path.exists(self.filename):
+            raise OSError("File %r does not exist" % self.filename)
+
     @cached_property
     def total_number_of_frames(self):
         assert self.fps != None
@@ -64,17 +69,32 @@ class FFmpegVideo(object):
 class Job(object):
     progress = 0
     _current_frame = 0
+    extra_ffmpeg_args = ()
 
-    def __init__(self, original_video, result_video,
+    def __init__(self, original_file, result_file,
                        audio_options, video_options):
-        self.original_video = original_video
-        self.result_video = result_video
+        self.original_file = original_file
+        self.result_file = result_file
         self.audio_options = audio_options
         self.video_options = video_options
 
-    def start(self, subproc):
+    def run(self, check_interval=0.3):
         self.start_time = time.time()
-        self.process = subproc
+        self.process = FFmpegSubprocess(
+            tuple(chain(
+                ['ffmpeg', '-v', '10'],
+                self.extra_ffmpeg_args,
+                ['-i', self.original_file.filename],
+                self.audio_options.as_commandline,
+                self.video_options.as_commandline,
+                [self.result_file.filename],
+            )),
+            stderr=subprocess.PIPE
+        )
+        while not self.process.finished():
+            time.sleep(check_interval)
+        if not self.process.successful:
+            self.process.raise_error()
 
     __sr_cache = None
     @property
@@ -87,61 +107,60 @@ class Job(object):
             return -1
         if seconds_spent != self.__sr_cache:
             average_speed = self._current_frame / seconds_spent
-            frames_left = self.original_video.total_number_of_frames - self._current_frame
+            frames_left = self.original_file.total_number_of_frames - self._current_frame
             self.__sr_cache = int(frames_left // average_speed)
         return self.__sr_cache
 
 
-def convert_file(original_file, result_file, progress_callback, finished_callback,
-                 audio_options=AudioOptions(), video_options=VideoOptions(),
-                 auto_size=True, check_interval=0.5):
-    """
-    Docstring blahblah
-    """
-    if not os.path.exists(original_file):
-        raise OSError("Original file '%s' does not exist" % original_file)
+def job_create(original_file, result_file,
+               audio_options=None, video_options=None,
+               auto_size=True, check_interval=0.5):
+    job = Job(
+        FFmpegFile(original_file),
+        FFmpegFile(result_file),
+        audio_options or AudioOptions(),
+        video_options or VideoOptions()
+    )
+    job.original_file.ffprobe()
+
     if os.path.exists(result_file):
         raise OSError("Result file '%s' already exists" % result_file)
 
-    job = Job(
-        FFmpegVideo(original_file),
-        FFmpegVideo(result_file),
-        audio_options,
-        video_options
-    )
-    job.original_video.ffprobe()
-
     if auto_size:
         width, height = autosize(
-            job.original_video,
-            video_options.get('max_width'),
-            video_options.get('max_height')
+            job.original_file,
+            job.video_options.get('max_width'),
+            job.video_options.get('max_height')
         )
-        video_options['size'] = '%dx%d' % (width, height)
+        job.video_options['size'] = '%dx%d' % (width, height)
 
-    job.start(FFmpegSubprocess(
-        tuple(chain(
-            ['ffmpeg', '-v', '10', '-i', original_file],
-            audio_options.as_commandline,
-            video_options.as_commandline,
-            [result_file],
-        )),
-        stderr=subprocess.PIPE
-    ))
-    _track_progress(job, progress_cb)
+    return job
 
-    while not job.process.finished():
-        time.sleep(check_interval)
-    if not job.process.successful():
-        job.process.raise_error()
+def convert_file(original_file, result_file, on_progress, *args, **kwargs):
+    job = job_create(original_file, result_file, *args, **kwargs)
+    _track_progress(job, on_progress)
+    job.run()
+    return job
 
-    finished_callback(job)
+def generate_thumbnail(original_file, thumbnail_file,
+                       seek='HALF', **vkwargs):
+    video_options = VideoOptions(codec='mjpeg', frames=1, **vkwargs)
+    job = job_create(original_file, thumbnail_file,
+                     video_options=video_options)
+    seek = {
+        'HALF' : job.original_file.duration / 2
+    }.get(seek, seek)
+    job.extra_ffmpeg_args = ['-ss', str(seek)]
+    job.run()
 
 
 @threadify(daemon=True)
 def _track_progress(job, progress_cb):
+    while not hasattr(job, 'process'):
+        # wait until the job has been started
+        time.sleep(0.1)
     stderr = job.process.stderr
-    total_number_of_frames = job.original_video.total_number_of_frames
+    total_number_of_frames = job.original_file.total_number_of_frames
     buf = StringIO()
     while not job.process.finished() and job.progress < 100:
         buf.truncate(0)
@@ -163,16 +182,12 @@ def _track_progress(job, progress_cb):
 
 if __name__ == '__main__':
     def progress_cb(job):
-        print "Progress: %d, %d seconds remaining" % (job.progress, job.seconds_remaining)
-
-    def ready_cb(job):
-        print "Job %r done" % job
+        print "Progress: %d%%, %d seconds remaining" % (job.progress, job.seconds_remaining)
 
     convert_file(
-        'sintel_trailer-480p.ogv',
+        'test_data/sintel_trailer-480p.ogv',
         'sintel.mp3',
         progress_cb,
-        ready_cb,
         AudioOptions(codec='libmp3lame', bitrate=320 * 1000),
         VideoOptions(codec='mpeg4', max_width=200)
     )

@@ -91,8 +91,7 @@ class Job(object):
             )),
             stderr=subprocess.PIPE
         )
-        while not self.process.finished():
-            time.sleep(check_interval)
+        self.process.wait()
         if not self.process.successful:
             self.process.raise_error()
 

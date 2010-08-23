@@ -18,7 +18,7 @@ __all__ = (
 def nice_percent(a, b):
     return min(100, int(a*100 // b))
 
-def autosize(video, max_width, max_height, digits=2):
+def autosize(video, max_width, max_height, digits=None):
     """
     Returns a tuple (width, height) chosen intelligently so that the
     maximum values (given in ``max_width`` and ``max_height``)
@@ -29,6 +29,9 @@ def autosize(video, max_width, max_height, digits=2):
     :param int digits: Number of digits the resulting `width` and `height` shall
                        be rounded to (or ``-1`` if no rounding shall be done)
     """
+    # The following code could be expressed in about two lines, but I think
+    # readability is much more important than performance/elegance here.
+
     aspect_ratio = video.width / video.height
 
     # calculate the ratio of the video and would-be heights and widths
@@ -36,20 +39,20 @@ def autosize(video, max_width, max_height, digits=2):
     if max_height and video.height >= max_height:
         heights_ratio = video.height / max_height
     else:
-        heights_ratio = -1
+        heights_ratio = None
     if max_width and video.width >= max_width:
         widths_ratio = video.width / max_width
     else:
-        widths_ratio = -1
-    if heights_ratio == widths_ratio == -1:
-        # do nothing. no maximums given that would matter in any way
-        w, h = video.width, video.height
-    else:
-        if heights_ratio > widths_ratio:
-            h, w = max_height, video.width / heights_ratio
-        else:
-            w, h = max_width, video.height / widths_ratio
+        widths_ratio = None
 
+    if heights_ratio is widths_ratio is None:
+        # do nothing. no maximums given that would matter in any way
+        return video.width, video.height
+
+    if heights_ratio > widths_ratio:
+        h, w = max_height, video.width / heights_ratio
+    else:
+        w, h = max_width, video.height / widths_ratio
     if digits > 0:
         w, h = round(w, digits), round(h, digits)
     return w, h

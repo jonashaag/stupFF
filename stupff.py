@@ -11,6 +11,9 @@ from utils import *
 class FFmpegError(Exception):
     pass
 
+class PythonBug(Exception):
+    pass
+
 class FFmpegSubprocess(subprocess.Popen):
     def __init__(self, *args, **kwargs):
         self._procname = args[0][0]
@@ -91,7 +94,11 @@ class Job(object):
             )),
             stderr=subprocess.PIPE
         )
-        self.process.wait()
+        try:
+            self.process.wait()
+        except OSError as oserr:
+            if oserr.errno == 10:
+                raise PythonBug('See #1731717')
         if not self.process.successful:
             self.process.raise_error()
 

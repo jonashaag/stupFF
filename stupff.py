@@ -10,9 +10,7 @@ from utils import *
 
 class FFmpegError(Exception):
     def __init__(self, proc, returncode):
-        self.returncode = returncode
-        Exception.__init__(self,
-            "%s ended returned code %d" % (proc, returncode))
+        Exception.__init__(self, "%s returned code %d" % (proc, returncode))
 
 class InvalidInputError(FFmpegError):
     pass

@@ -1,8 +1,4 @@
 from __future__ import division
-from future_builtins import map
-from functools import wraps
-import re
-import threading
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -76,17 +72,21 @@ def threadify(daemon=False):
     """
     def wrapper(func):
         def decorator(*args, **kwargs):
-            thread = threading.Thread(target=func, args=args,
-                                      kwargs=kwargs)
+            from threading import Thread
+            thread = Thread(target=func, args=args, kwargs=kwargs)
             if daemon:
                 thread.daemon = True
             thread.start()
+            return thread
+
         decorator.__name__ = '%r [threadified]' % func
         return decorator
     return wrapper
 
 def simple_extractor(regex, fallback=None):
-    regex = re.compile(regex)
+    from re import compile
+    from functools import wraps
+    regex = compile(regex)
     def wrapper(func):
         @wraps(func)
         def decorator(ffmpeg_stderr):

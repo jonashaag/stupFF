@@ -144,8 +144,16 @@ def job_create(original_file, result_file,
 
 def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     job = job_create(original_file, result_file, *args, **kwargs)
-    _track_progress(job, on_progress)
+    thread = _track_progress(job, on_progress)
     job.run()
+    # IMPORTANT: We `join` the thread to ensure it has ended when this
+    # function returns to avoid weird behaviour. If we don't `join` the
+    # thread, `on_progress` might be called *after* this function returned,
+    # just because of the "randomness" threaded functions are scheduled with.
+    # Users might expect that `on_progress` can't be called after the
+    # conversion finished (which *would be* weird, indeed), so make sure
+    # things don't mess up.
+    thread.join()
     return job
 
 def generate_thumbnail(original_file, thumbnail_file,
@@ -184,7 +192,11 @@ def _track_progress(job, progress_cb):
                     total_number_of_frames
                 )
                 job._current_frame = current_frame
-                progress_cb(job)
+                if not job.process.finished():
+                    # IMPORTANT: It is possible that the job has
+                    # finished while we did the above calculations, so
+                    # re-check the state before invoking `progress_cb`.
+                    progress_cb(job)
 
 if __name__ == '__main__':
     def progress_cb(job):

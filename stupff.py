@@ -9,10 +9,17 @@ from utils import *
 
 
 class FFmpegError(Exception):
+    def __init__(self, proc, returncode):
+        self.returncode = returncode
+        Exception.__init__(self,
+            "%s ended returned code %d" % (proc, returncode))
+
+class InvalidInputError(FFmpegError):
     pass
 
 class PythonBug(Exception):
     pass
+
 
 class FFmpegSubprocess(subprocess.Popen):
     def __init__(self, *args, **kwargs):
@@ -28,10 +35,10 @@ class FFmpegSubprocess(subprocess.Popen):
 
     def raise_error(self):
         assert not self.successful()
-        raise FFmpegError(
-            "%s exited with code '%d'" % \
-            (self._procname, self.returncode)
-        )
+        if self.returncode in [234]:
+            raise InvalidInputError(self._procname, self.returncode)
+        else:
+            raise FFmpegError(self._procname, self.returncode)
 
 class FFmpegFile(object):
     fps = \
@@ -99,7 +106,7 @@ class Job(object):
         except OSError as oserr:
             if oserr.errno == 10:
                 raise PythonBug('See #1731717')
-        if not self.process.successful:
+        if not self.process.successful():
             self.process.raise_error()
 
     __sr_cache = None

@@ -98,8 +98,8 @@ class Job(object):
                 ['ffmpeg', '-v', '10'],
                 self.extra_ffmpeg_args,
                 ['-i', self.original_file.filename],
-                self.audio_options.as_commandline,
-                self.video_options.as_commandline,
+                self.audio_options.as_commandline(),
+                self.video_options.as_commandline(),
                 [self.result_file.filename],
             )),
             stderr=subprocess.PIPE

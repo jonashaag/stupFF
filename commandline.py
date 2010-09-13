@@ -1,5 +1,3 @@
-from utils import cached_property
-
 class SPECIAL:
     pass
 
@@ -18,7 +16,6 @@ class Options(dict):
     __getattr__ = dict.__getitem__
     empty = ()
 
-    @cached_property
     def as_commandline(self):
         if not self:
             for item in self.empty:

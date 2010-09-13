@@ -67,7 +67,12 @@ class FFmpegFile(object):
         if not os.path.exists(self.filename):
             raise OSError("File %r does not exist" % self.filename)
 
-    @cached_property
+    @property
+    def is_video(self):
+        # TODO
+        return self.fps is not None
+
+    @property
     def total_number_of_frames(self):
         assert self.fps != None
         assert self.duration != None

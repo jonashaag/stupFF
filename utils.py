@@ -141,25 +141,6 @@ def extract_frame(match):
     """
     return int(match.group(1))
 
-class cached_property(object):
-    """
-    A property that is lazily calculated and then cached.
-    Stolen from Armin Ronacher's Logbook (http:/github.com/mitsuhiko/logbook)
-    """
-    _missing = object()
-
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, obj, type=None):
-        if obj is None:
-            return self
-        value = obj.__dict__.get(self.func.__name__, self._missing)
-        if value is self._missing:
-            value = self.func(obj)
-            obj.__dict__[self.func.__name__] = self.func(obj)
-        return value
-
 if __name__ == '__main__':
     import doctest
     doctest.testmod()

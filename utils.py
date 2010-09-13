@@ -54,7 +54,7 @@ def autosize(video, max_width, max_height, digits=None):
 
 def threadify(daemon=False):
     """
-    Decorator to "threadify" a function, so ::
+    Decorator to "threadify" a function, so that ::
 
         class MyThread(threading.Thread):
             def run(self):
@@ -69,9 +69,10 @@ def threadify(daemon=False):
         func()
 
     """
+    from threading import Thread
+
     def wrapper(func):
         def decorator(*args, **kwargs):
-            from threading import Thread
             thread = Thread(target=func, args=args, kwargs=kwargs)
             if daemon:
                 thread.daemon = True
@@ -80,6 +81,7 @@ def threadify(daemon=False):
 
         decorator.__name__ = '%r [threadified]' % func
         return decorator
+
     return wrapper
 
 def simple_extractor(regex, fallback=None):

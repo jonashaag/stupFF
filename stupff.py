@@ -80,9 +80,11 @@ class FFmpegFile(object):
 
 
 class Job(object):
-    progress = 0
-    _current_frame = 0
-    extra_ffmpeg_args = ()
+    process = None
+    progress = None
+    commandline = None
+    current_frame = None
+    extra_ffmpeg_args = []
 
     def __init__(self, original_file, result_file,
                        audio_options, video_options):
@@ -91,19 +93,20 @@ class Job(object):
         self.audio_options = audio_options
         self.video_options = video_options
 
-    def run(self, check_interval=0.3):
-        self.start_time = time.time()
-        self.process = FFmpegSubprocess(
-            tuple(chain(
-                ['ffmpeg', '-v', '10'],
-                self.extra_ffmpeg_args,
-                ['-i', self.original_file.filename],
-                self.audio_options.as_commandline(),
-                self.video_options.as_commandline(),
-                [self.result_file.filename],
-            )),
-            stderr=subprocess.PIPE
+    def get_commandline(self):
+        return (
+            ['ffmpeg', '-v', '10'] +
+            self.extra_ffmpeg_args +
+            ['-i', self.original_file.filename] +
+            list(self.audio_options.as_commandline()) +
+            list(self.video_options.as_commandline()) +
+            [self.result_file.filename]
         )
+
+    def run(self):
+        self.commandline = self.get_commandline()
+        self.start_time = time.time()
+        self.process = FFmpegSubprocess(self.commandline, stderr=subprocess.PIPE)
         try:
             self.process.wait()
         except OSError as oserr:
@@ -122,15 +125,14 @@ class Job(object):
         if not seconds_spent:
             return -1
         if seconds_spent != self.__sr_cache:
-            average_speed = self._current_frame / seconds_spent
-            frames_left = self.original_file.total_number_of_frames - self._current_frame
+            average_speed = self.current_frame / seconds_spent
+            frames_left = self.original_file.total_number_of_frames - self.current_frame
             self.__sr_cache = int(frames_left // average_speed)
         return self.__sr_cache
 
 
-def job_create(original_file, result_file,
-               audio_options=None, video_options=None,
-               auto_size=True, check_interval=0.5):
+def job_create(original_file, result_file, audio_options=None,
+               video_options=None, auto_size=True):
     job = Job(
         FFmpegFile(original_file),
         FFmpegFile(result_file),
@@ -166,8 +168,7 @@ def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     thread.join()
     return job
 
-def generate_thumbnail(original_file, thumbnail_file,
-                       seek='HALF', **vkwargs):
+def generate_thumbnail(original_file, thumbnail_file, seek='HALF', **vkwargs):
     video_options = VideoOptions(codec='mjpeg', frames=1, **vkwargs)
     job = job_create(original_file, thumbnail_file,
                      video_options=video_options)
@@ -180,9 +181,9 @@ def generate_thumbnail(original_file, thumbnail_file,
 
 @threadify(daemon=True)
 def _track_progress(job, progress_cb):
-    while not hasattr(job, 'process'):
+    while job.process is None:
         # wait until the job has been started
-        time.sleep(0.1)
+        time.sleep(0.01)
     stderr = job.process.stderr
     total_number_of_frames = job.original_file.total_number_of_frames
     buf = StringIO()
@@ -201,7 +202,7 @@ def _track_progress(job, progress_cb):
                     current_frame,
                     total_number_of_frames
                 )
-                job._current_frame = current_frame
+                job.current_frame = current_frame
                 if not job.process.finished():
                     # IMPORTANT: It is possible that the job has
                     # finished while we did the above calculations, so

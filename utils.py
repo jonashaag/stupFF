@@ -7,8 +7,7 @@ except ImportError:
 __all__ = (
     'extract_duration', 'extract_fps', 'extract_frame',
     'extract_width_and_height', 'extract_bitrate',
-    'cached_property', 'StringIO', 'nice_percent',
-    'threadify', 'autosize'
+    'StringIO', 'nice_percent', 'threadify', 'autosize'
 )
 
 def nice_percent(a, b):

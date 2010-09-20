@@ -177,6 +177,7 @@ def generate_thumbnail(original_file, thumbnail_file, seek='HALF', **vkwargs):
     }.get(seek, seek)
     job.extra_ffmpeg_args = ['-ss', str(seek)]
     job.run()
+    return job
 
 
 @threadify(daemon=True)

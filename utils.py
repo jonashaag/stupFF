@@ -117,7 +117,7 @@ def extract_width_and_height(match):
     """
     return int(match.group(1)), int(match.group(2))
 
-@simple_extractor('Duration:\s*([\d:]+)')
+@simple_extractor('Duration:\s*([\d:]+)(\.\d+)?')
 def extract_duration(match):
     """
     Returns the duration extracted from FFmpeg's stderr output in seconds::
@@ -126,7 +126,10 @@ def extract_duration(match):
         8242
     """
     duration = match.group(1)
+    milliseconds = match.group(2)
     hours, minutes, seconds = map(int, duration.split(':'))
+    if milliseconds:
+        seconds = int(round(seconds + float(milliseconds), 0))
     return hours*3600 + minutes*60 + seconds
 
 @simple_extractor('(\d+) fps')

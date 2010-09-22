@@ -98,13 +98,16 @@ def simple_extractor(regex, fallback=None):
         return decorator
     return wrapper
 
-@simple_extractor('bitrate: (\d+)')
+@simple_extractor('bitrate: (\d+|N\/A)')
 def extract_bitrate(match):
     """
         >>> extract_bitrate("...blah...bitrate: 4242...blah...")
         4242
     """
-    return int(match.group(1))
+    match = match.group(1)
+    if match == 'N/A':
+        return -1
+    return int(match)
 
 @simple_extractor(',\s+(\d+)x(\d+)', fallback=(None, None))
 def extract_width_and_height(match):

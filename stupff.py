@@ -70,7 +70,9 @@ class FFmpegFile(object):
     @property
     def is_video(self):
         # TODO
-        return self.fps is not None
+        if self.bitrate == -1:
+            return self.fps is not None
+        return True
 
     @property
     def total_number_of_frames(self):

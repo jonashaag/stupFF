@@ -3,14 +3,14 @@ import os
 import time
 import subprocess
 from itertools import chain
+import mediainfo
 
 from commandline import AudioOptions, VideoOptions
 from utils import *
 
 
 class FFmpegError(Exception):
-    def __init__(self, proc, returncode):
-        Exception.__init__(self, "%s returned code %d" % (proc, returncode))
+    pass
 
 class InvalidInputError(FFmpegError):
     pass
@@ -39,47 +39,28 @@ class FFmpegSubprocess(subprocess.Popen):
             raise FFmpegError(self._procname, self.returncode)
 
 class FFmpegFile(object):
-    fps = \
-    duration = \
-    bitrate = \
-    width = \
-    height = None
-
-    def __init__(self, filename):
+    def __init__(self, filename, exists=True):
         self.filename = filename
+        if exists:
+            self.get_metadata()
 
-    def ffprobe(self):
-        self.ensure_exists()
-        proc = FFmpegSubprocess(
-            ['ffprobe', self.filename],
-            stderr=subprocess.PIPE
+    def get_metadata(self):
+        info = mediainfo.get_metadata(
+            self.filename,
+            General={'VideoCount' : bool},
+            Video={'FrameRate' : lambda x:int(float(x)),
+                   'Width' : int, 'Height' : int,
+                   'Duration' : int, 'BitRate' : float}
         )
-        proc.wait()
-        if not proc.successful():
-            proc.raise_error()
-        stderr = proc.stderr.read()
-        self.fps = extract_fps(stderr)
-        self.duration = extract_duration(stderr)
-        self.bitrate = extract_bitrate(stderr)
-        self.width, self.height = extract_width_and_height(stderr)
-
-    def ensure_exists(self):
-        if not os.path.exists(self.filename):
-            raise OSError("File %r does not exist" % self.filename)
-
-    @property
-    def is_video(self):
-        # TODO
-        if self.bitrate == -1:
-            return self.fps is not None
-        return True
-
-    @property
-    def total_number_of_frames(self):
-        assert self.fps != None
-        assert self.duration != None
-        return self.fps * self.duration
-
+        if not info['General']['VideoCount']:
+            raise InvalidInputError(self.filename)
+        info = info['Video']
+        self.width = info['Width']
+        self.height = info['Height']
+        self.duration = info['Duration']/1000.0
+        self.bitrate = info['BitRate']/1000.0
+        self.fps = info['FrameRate']
+        self.total_number_of_frames = self.duration * self.fps
 
 class Job(object):
     process = None
@@ -137,11 +118,10 @@ def job_create(original_file, result_file, audio_options=None,
                video_options=None, auto_size=True):
     job = Job(
         FFmpegFile(original_file),
-        FFmpegFile(result_file),
+        FFmpegFile(result_file, exists=False),
         audio_options or AudioOptions(),
         video_options or VideoOptions()
     )
-    job.original_file.ffprobe()
 
     if os.path.exists(result_file):
         raise OSError("Result file '%s' already exists" % result_file)

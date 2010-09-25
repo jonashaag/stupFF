@@ -95,6 +95,8 @@ class Job(object):
         except OSError as oserr:
             if oserr.errno == 10:
                 raise PythonBug('See #1731717')
+            else:
+                raise
         if not self.process.successful():
             self.process.raise_error()
 

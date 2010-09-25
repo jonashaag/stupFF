@@ -150,15 +150,25 @@ def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     thread.join()
     return job
 
-def generate_thumbnail(original_file, thumbnail_file, seek='HALF', **vkwargs):
+def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
+    seeks = ['HALF', '1']
+    if seek is not None:
+        seeks.insert(0, seek)
     video_options = VideoOptions(codec='mjpeg', frames=1, **vkwargs)
     job = job_create(original_file, thumbnail_file,
                      video_options=video_options)
-    seek = {
-        'HALF' : job.original_file.duration / 2
-    }.get(seek, seek)
-    job.extra_ffmpeg_args = ['-ss', str(seek)]
-    job.run()
+    for seek in seeks:
+        seek = {'HALF' : job.original_file.duration / 2}.get(seek, seek)
+        job.extra_ffmpeg_args = ['-ss', str(seek)]
+        job.run()
+        if os.path.exists(thumbnail_file):
+            # alright, we're done
+            break
+        else:
+            # FFmpeg exited with code 0 but failed to generate thumbnails.
+            # This can happen for some formats and has something to do with
+            # keyframes I don't understand at all.  Try a different seek.
+            continue
     return job
 
 

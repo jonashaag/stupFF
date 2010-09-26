@@ -10,7 +10,7 @@ class Options(dict):
         >>> opt = AudioOptions(codec='vp8', bitrate=150000)
         >>> opt.bitrate
         150000
-        >>> opt.as_commandline
+        >>> list(opt.as_commandline())
         ['-acodec', 'vp8', '-ab', '150000']
     """
     __getattr__ = dict.__getitem__
@@ -48,3 +48,7 @@ class VideoOptions(Options):
         max_width=SPECIAL,
         max_height=SPECIAL
     )
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()

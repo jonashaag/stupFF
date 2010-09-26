@@ -203,15 +203,3 @@ def _track_progress(job, progress_cb):
                     # finished while we did the above calculations, so
                     # re-check the state before invoking `progress_cb`.
                     progress_cb(job)
-
-if __name__ == '__main__':
-    def progress_cb(job):
-        print "Progress: %d%%, %d seconds remaining" % (job.progress, job.seconds_remaining)
-
-    convert_file(
-        'test_data/sintel_trailer-480p.ogv',
-        'sintel.mp3',
-        progress_cb,
-        AudioOptions(codec='libmp3lame', bitrate=320 * 1000),
-        VideoOptions(codec='mpeg4', max_width=200)
-    )

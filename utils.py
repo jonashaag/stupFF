@@ -124,6 +124,10 @@ def extract_duration(match):
 
         >>> extract_duration("...blah...Duration:\t 02:17:22...blah...")
         8242
+        >>> extract_duration("...blah...Duration:\t\\n 02:17:22.4...blah")
+        8242
+        >>> extract_duration("...blah...Duration:\t\\n 02:17:22.5...blah")
+        8243
     """
     duration = match.group(1)
     milliseconds = match.group(2)

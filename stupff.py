@@ -153,14 +153,16 @@ def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     return job
 
 def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
-    seeks = ['HALF', '1']
+    seeks = [lambda n:n/3, lambda n:n/2, 1]
     if seek is not None:
         seeks.insert(0, seek)
+
     video_options = VideoOptions(codec='mjpeg', frames=1, **vkwargs)
     job = job_create(original_file, thumbnail_file,
                      video_options=video_options)
     for seek in seeks:
-        seek = {'HALF' : job.original_file.duration / 2}.get(seek, seek)
+        if callable(seek):
+            seek = seek(job.original_video.duration)
         job.extra_ffmpeg_args = ['-ss', str(seek)]
         job.run()
         if os.path.exists(thumbnail_file):

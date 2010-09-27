@@ -162,7 +162,7 @@ def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
                      video_options=video_options)
     for seek in seeks:
         if callable(seek):
-            seek = seek(job.original_video.duration)
+            seek = seek(job.original_file.duration)
         job.extra_ffmpeg_args = ['-ss', str(seek)]
         job.run()
         if os.path.exists(thumbnail_file):

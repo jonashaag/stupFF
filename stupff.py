@@ -1,12 +1,12 @@
 from __future__ import division
 import os
 import time
-import subprocess
-from itertools import chain
-import mediainfo
+from subprocess import Popen, PIPE
 
-from commandline import AudioOptions, VideoOptions
-from utils import *
+from mediainfo import get_metadata as get_file_metadata
+
+from .commandline import AudioOptions, VideoOptions
+from .utils import *
 
 
 class FFmpegError(Exception):
@@ -15,14 +15,18 @@ class FFmpegError(Exception):
 class InvalidInputError(FFmpegError):
     pass
 
-class PythonBug(Exception):
-    pass
 
-
-class FFmpegSubprocess(subprocess.Popen):
+class FFmpegSubprocess(Popen):
     def __init__(self, *args, **kwargs):
         self._procname = args[0][0]
-        subprocess.Popen.__init__(self, *args, **kwargs)
+        Popen.__init__(self, *args, **kwargs)
+
+    def safe_wait(self):
+        # mimics the bahaviour of `.wait()`, but hopefully with a lot smaller
+        # chance to hit Python bug #1731717 (which crashes calls to `waitpid`,
+        # and thus to `.wait()`, `.poll()`, ... randomly)
+        while not self.finished():
+            time.sleep(0.1)
 
     def successful(self):
         assert self.finished()
@@ -45,7 +49,7 @@ class FFmpegFile(object):
             self.get_metadata()
 
     def get_metadata(self):
-        info = mediainfo.get_metadata(
+        info = get_file_metadata(
             self.filename,
             General={'VideoCount' : bool},
             Video={'FrameRate' : lambda x:int(float(x)),
@@ -57,8 +61,8 @@ class FFmpegFile(object):
         info = info['Video']
         self.width = info['Width']
         self.height = info['Height']
-        self.duration = info['Duration']/1000.0
-        self.bitrate = info['BitRate']/1000.0
+        self.duration = info['Duration']/1000
+        self.bitrate = info['BitRate']/1000
         self.fps = info['FrameRate']
         self.total_number_of_frames = self.duration * self.fps
 
@@ -89,16 +93,10 @@ class Job(object):
     def run(self):
         self.commandline = self.get_commandline()
         self.start_time = time.time()
-        self.process = FFmpegSubprocess(self.commandline, stderr=subprocess.PIPE)
-        try:
-            self.process.wait()
-        except OSError as oserr:
-            if oserr.errno == 10:
-                raise PythonBug('See #1731717')
-            else:
-                raise
-        if not self.process.successful():
-            self.process.raise_error()
+        self.process = process = FFmpegSubprocess(self.commandline, stderr=PIPE)
+        process.safe_wait()
+        if not process.successful():
+            process.raise_error()
 
     __sr_cache = None
     @property
@@ -179,7 +177,8 @@ def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
 @threadify(daemon=True)
 def _track_progress(job, progress_cb):
     while job.process is None:
-        # wait until the job has been started
+        # wait until the job has been started (a matter of milliseconds, but
+        # there's a chance this code is executed before `Job.__init__` is done)
         time.sleep(0.01)
     stderr = job.process.stderr
     total_number_of_frames = job.original_file.total_number_of_frames

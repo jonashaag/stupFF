@@ -5,8 +5,8 @@ from subprocess import Popen, PIPE
 
 from mediainfo import get_metadata as get_file_metadata
 
-from .commandline import AudioOptions, VideoOptions
-from .utils import *
+from commandline import AudioOptions, VideoOptions
+from utils import *
 
 
 class FFmpegError(Exception):

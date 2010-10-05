@@ -4,11 +4,25 @@ try:
 except ImportError:
     from StringIO import StringIO
 
-__all__ = (
-    'extract_duration', 'extract_fps', 'extract_frame',
-    'extract_width_and_height', 'extract_bitrate',
-    'StringIO', 'nice_percent', 'threadify', 'autosize'
-)
+class MonkeyPatch(object):
+    """
+    >>> class obj(object):
+    ...   a = 1
+    >>> obj.a
+    1
+    >>> with MonkeyPatch(obj, 'a', 2):
+    ...   obj.a
+    2
+    >>> obj.a
+    1
+    """
+    def __init__(self, obj, attr, newattr):
+        self._setattr_args = (obj, attr, getattr(obj, attr))
+        setattr(obj, attr, newattr)
+
+    def __enter__(self): pass
+    def __exit__(self, *exc_info):
+        setattr(*self._setattr_args)
 
 def nice_percent(a, b):
     return min(100, int(a*100 // b))
@@ -155,3 +169,5 @@ def extract_frame(match):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+else:
+    del simple_extractor, division

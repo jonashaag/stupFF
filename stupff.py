@@ -8,25 +8,18 @@ from mediainfo import get_metadata as get_file_metadata
 from commandline import AudioOptions, VideoOptions
 from utils import *
 
-
 class FFmpegError(Exception):
     pass
 
 class InvalidInputError(FFmpegError):
     pass
 
-
 class FFmpegSubprocess(Popen):
     def __init__(self, *args, **kwargs):
         self._procname = args[0][0]
-        Popen.__init__(self, *args, **kwargs)
-
-    def safe_wait(self):
-        # mimics the bahaviour of `.wait()`, but hopefully with a lot smaller
-        # chance to hit Python bug #1731717 (which crashes calls to `waitpid`,
-        # and thus to `.wait()`, `.poll()`, ... randomly)
-        while not self.finished():
-            time.sleep(0.1)
+        # hackaround to avoid Python bug #1731717
+        with MonkeyPatch(subprocess, '_cleanup', lambda: None):
+            Popen.__init__(self, *args, **kwargs)
 
     def successful(self):
         assert self.finished()
@@ -94,7 +87,7 @@ class Job(object):
         self.commandline = self.get_commandline()
         self.start_time = time.time()
         self.process = process = FFmpegSubprocess(self.commandline, stderr=PIPE)
-        process.safe_wait()
+        process.wait()
         if not process.successful():
             process.raise_error()
 

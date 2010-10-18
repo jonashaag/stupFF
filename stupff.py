@@ -58,13 +58,20 @@ class FFmpegFile(object):
         )
         if not info['General']['VideoCount']:
             raise InvalidInputError(self.filename)
+
         info = info['Video']
-        self.width = info['Width']
-        self.height = info['Height']
-        self.duration = info['Duration']/1000
-        self.bitrate = info['BitRate']/1000
-        self.fps = info['FrameRate']
-        self.total_number_of_frames = self.duration * self.fps
+        for attr in ['Width', 'Height', 'Duration', 'BitRate', 'FrameRate']:
+            setattr(self, attr.lower(), info[attr] or None)
+
+        if self.bitrate is not None:
+            self.duration /= 1000
+
+        if self.duration is not None:
+            self.duration /= 1000
+        if self.duration is not None and self.fps is not None:
+            self.total_number_of_frames = self.duration * self.fps
+        else:
+            self.total_number_of_frames = None
 
 class Job(object):
     process = None
@@ -98,20 +105,17 @@ class Job(object):
         if not process.successful():
             process.raise_error()
 
-    __sr_cache = None
     @property
-    def seconds_remaining(self):
+    def calculate_remaining_seconds(self):
         """
         Remaining time until this conversion is done (approximated :-)
         """
         seconds_spent = int(time.time() - self.start_time)
         if not seconds_spent:
             return -1
-        if seconds_spent != self.__sr_cache:
-            average_speed = self.current_frame / seconds_spent
-            frames_left = self.original_file.total_number_of_frames - self.current_frame
-            self.__sr_cache = int(frames_left // average_speed)
-        return self.__sr_cache
+        average_speed = self.current_frame / seconds_spent
+        frames_left = self.original_file.total_number_of_frames - self.current_frame
+        self.__sr_cache = int(frames_left // average_speed)
 
 
 def job_create(original_file, result_file, audio_options=None,
@@ -138,16 +142,21 @@ def job_create(original_file, result_file, audio_options=None,
 
 def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     job = job_create(original_file, result_file, *args, **kwargs)
-    thread = _track_progress(job, on_progress)
-    job.run()
-    # IMPORTANT: We `join` the thread to ensure it has ended when this
-    # function returns to avoid weird behaviour. If we don't `join` the
-    # thread, `on_progress` might be called *after* this function returned,
-    # just because of the "randomness" threaded functions are scheduled with.
-    # Users might expect that `on_progress` can't be called after the
-    # conversion finished (which *would be* weird, indeed), so make sure
-    # things don't mess up.
-    thread.join()
+    if job.original_file.total_number_of_frames:
+        thread = _track_progress(job, on_progress)
+        job.run()
+        # IMPORTANT: We `join` the thread to ensure it has ended when this
+        # function returns to avoid weird behaviour. If we don't `join` the
+        # thread, `on_progress` might be called *after* this function returned,
+        # just because of the "randomness" threaded functions are scheduled with.
+        # Users might expect that `on_progress` can't be called after the
+        # conversion finished (which *would be* weird, indeed), so make sure
+        # things don't mess up.
+        thread.join()
+    else:
+        # If we can't calculate the number of frames in this video, we can't
+        # calculate any progress. Just run the job.
+        job.run()
     return job
 
 def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
@@ -160,6 +169,8 @@ def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
                      video_options=video_options)
     for seek in seeks:
         if callable(seek):
+            if not job.original_file.duration:
+                continue # we have no duration information
             seek = seek(job.original_file.duration)
         job.extra_ffmpeg_args = ['-ss', str(seek)]
         job.run()

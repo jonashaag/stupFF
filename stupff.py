@@ -49,29 +49,35 @@ class FFmpegFile(object):
             self.get_metadata()
 
     def get_metadata(self):
-        info = get_file_metadata(
-            self.filename,
-            General={'VideoCount' : bool},
-            Video={'FrameRate' : lambda x:int(float(x)),
-                   'Width' : int, 'Height' : int,
-                   'Duration' : int, 'BitRate' : float}
-        )
+        query = {
+            'General' : {'VideoCount' : bool},
+            'Video' : {
+                'FrameRate' : lambda x:int(float(x)),
+                'Width' : int, 'Height' : int,
+                'Duration' : int, 'BitRate' : float,
+                'FrameCount' : int
+            }
+        }
+        info = get_file_metadata(self.filename, **query)
         if not info['General']['VideoCount']:
             raise InvalidInputError(self.filename)
 
         info = info['Video']
-        for attr in ['Width', 'Height', 'Duration', 'BitRate', 'FrameRate']:
-            setattr(self, attr.lower(), info[attr] or None)
+        for attr in query['Video'].keys():
+            setattr(self, attr.lower(), info[attr])
 
         if self.bitrate is not None:
             self.duration /= 1000
 
         if self.duration is not None:
             self.duration /= 1000
-        if self.duration is not None and self.fps is not None:
-            self.total_number_of_frames = self.duration * self.fps
-        else:
-            self.total_number_of_frames = None
+
+        # XXX: Are there any cases in that this condition if fulfilled?
+        if self.framecount is None and \
+           self.duration is not None and \
+           self.framerate is not None:
+            # manually calculate the number of frames
+            self.framecount = self.duration * self.framerate
 
 class Job(object):
     process = None
@@ -114,7 +120,7 @@ class Job(object):
         if not seconds_spent:
             return -1
         average_speed = self.current_frame / seconds_spent
-        frames_left = self.original_file.total_number_of_frames - self.current_frame
+        frames_left = self.original_file.framecount - self.current_frame
         self.__sr_cache = int(frames_left // average_speed)
 
 
@@ -142,7 +148,7 @@ def job_create(original_file, result_file, audio_options=None,
 
 def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     job = job_create(original_file, result_file, *args, **kwargs)
-    if job.original_file.total_number_of_frames:
+    if job.original_file.framecount:
         thread = _track_progress(job, on_progress)
         job.run()
         # IMPORTANT: We `join` the thread to ensure it has ended when this
@@ -192,7 +198,7 @@ def _track_progress(job, progress_cb):
         # there's a chance this code is executed before `Job.__init__` is done)
         time.sleep(0.01)
     stderr = job.process.stderr
-    total_number_of_frames = job.original_file.total_number_of_frames
+    framecount = job.original_file.framecount
     buf = StringIO()
     while not job.process.finished() and job.progress < 100:
         buf.truncate(0)
@@ -205,10 +211,7 @@ def _track_progress(job, progress_cb):
         else:
             current_frame = extract_frame(buf.getvalue())
             if current_frame is not None:
-                job.progress = nice_percent(
-                    current_frame,
-                    total_number_of_frames
-                )
+                job.progress = nice_percent(current_frame, framecount)
                 job.current_frame = current_frame
                 if not job.process.finished():
                     # IMPORTANT: It is possible that the job has

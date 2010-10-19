@@ -67,7 +67,7 @@ class FFmpegFile(object):
             setattr(self, attr.lower(), info[attr])
 
         if self.bitrate is not None:
-            self.duration /= 1000
+            self.bitrate /= 1000
 
         if self.duration is not None:
             self.duration /= 1000

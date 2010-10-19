@@ -111,7 +111,6 @@ class Job(object):
         if not process.successful():
             process.raise_error()
 
-    @property
     def calculate_remaining_seconds(self):
         """
         Remaining time until this conversion is done (approximated :-)

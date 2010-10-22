@@ -120,7 +120,7 @@ class Job(object):
             return -1
         average_speed = self.current_frame / seconds_spent
         frames_left = self.original_file.framecount - self.current_frame
-        self.__sr_cache = int(frames_left // average_speed)
+        return int(frames_left // average_speed)
 
 
 def job_create(original_file, result_file, audio_options=None,

@@ -45,6 +45,7 @@ class VideoOptions(Options):
         frames='vframes',
         size='s',
         codec='vcodec',
+        quality='qscale',
         max_width=SPECIAL,
         max_height=SPECIAL
     )

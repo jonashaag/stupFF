@@ -27,7 +27,7 @@ class UtilsTestcase(unittest.TestCase):
                 [(100, 100), (20, 5000), (20, 20)]
             ):
                 class video:
-                    width, height = size
+                    meta = {'width' : size[0], 'height' : size[1]}
                 w, h = stupff.autosize(video, *max_size)
                 outp = [round(x, digits) for x in outp]
                 w_h = [round(x, digits) for x in outp]

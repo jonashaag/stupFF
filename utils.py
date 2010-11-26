@@ -26,28 +26,28 @@ def autosize(video, max_width, max_height, digits=None):
     """
     # The following code could be expressed in about two lines, but I think
     # readability is much more important than performance/elegance here.
-    width, height = video.meta['width'], video.meta['height']
-    aspect_ratio = width / height
+
+    aspect_ratio = video.width / video.height
 
     # calculate the ratio of the video and would-be heights and widths
     # and go on with the highest of the both.
-    if max_height and height >= max_height:
-        heights_ratio = height / max_height
+    if max_height and video.height >= max_height:
+        heights_ratio = video.height / max_height
     else:
         heights_ratio = None
-    if max_width and width >= max_width:
-        widths_ratio = width / max_width
+    if max_width and video.width >= max_width:
+        widths_ratio = video.width / max_width
     else:
         widths_ratio = None
 
     if heights_ratio is widths_ratio is None:
         # do nothing. no maximums given that would matter in any way
-        return width, height
+        return video.width, video.height
 
     if heights_ratio > widths_ratio:
-        h, w = max_height, width / heights_ratio
+        h, w = max_height, video.width / heights_ratio
     else:
-        w, h = max_width, height / widths_ratio
+        w, h = max_width, video.height / widths_ratio
     if digits > 0:
         w, h = round(w, digits), round(h, digits)
     return w, h

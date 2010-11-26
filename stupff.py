@@ -49,7 +49,7 @@ class FFmpegFile(object):
     def __init__(self, filename, exists=True):
         self.filename = filename
         if exists:
-            self.meta = self.get_metadata()
+            self.__dict__.update(self.get_metadata())
 
     def get_metadata(self):
         cull_empty = lambda d: dict((k, v) for k, v in d.items() if v not in ('', None))
@@ -162,7 +162,7 @@ class Job(object):
         if not seconds_spent:
             return -1
         average_speed = self.current_frame / seconds_spent
-        frames_left = self.original_file.meta['framecount'] - self.current_frame
+        frames_left = self.original_file.framecount - self.current_frame
         return int(frames_left // average_speed)
 
 
@@ -190,7 +190,7 @@ def job_create(original_file, result_file, audio_options=None,
 
 def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     job = job_create(original_file, result_file, *args, **kwargs)
-    if job.original_file.meta['framecount']:
+    if job.original_file.framecount:
         thread = _track_progress(job, on_progress)
         job.run()
         # IMPORTANT: We `join` the thread to ensure it has ended when this
@@ -217,9 +217,9 @@ def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
                      video_options=video_options)
     for seek in seeks:
         if callable(seek):
-            if not job.original_file.meta['duration']:
+            if not job.original_file.duration:
                 continue # we have no duration information
-            seek = seek(job.original_file.meta['duration'])
+            seek = seek(job.original_file.duration)
         job.extra_ffmpeg_args = ['-ss', str(seek)]
         job.run()
         if os.path.exists(thumbnail_file):
@@ -240,7 +240,7 @@ def _track_progress(job, progress_cb):
         # there's a chance this code is executed before `Job.__init__` is done)
         time.sleep(0.01)
     stderr = job.process.stderr
-    framecount = job.original_file.meta['framecount']
+    framecount = job.original_file.framecount
     buf = StringIO()
     while not job.process.finished() and job.progress < 100:
         buf.truncate(0)

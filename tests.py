@@ -27,7 +27,7 @@ class UtilsTestcase(unittest.TestCase):
                 [(100, 100), (20, 5000), (20, 20)]
             ):
                 class video:
-                    meta = {'width' : size[0], 'height' : size[1]}
+                    width, height = size
                 w, h = stupff.autosize(video, *max_size)
                 outp = [round(x, digits) for x in outp]
                 w_h = [round(x, digits) for x in outp]
@@ -37,15 +37,15 @@ class UtilsTestcase(unittest.TestCase):
         for file in TESTFILES['images']:
             ffile = stupff.FFmpegFile(file)
             for required in ['width', 'height']:
-                self.assertNotEqual(ffile.meta[required], None)
+                self.assertNotEqual(getattr(ffile, required), None)
 
         for file in TESTFILES['videos']:
             if file.endswith('webm'): continue
             ffile = stupff.FFmpegFile(file)
             for key in 'width height framerate bitrate framecount duration'.split():
-                self.assertNotEqual(ffile.meta[key], '')
-                self.assertNotEqual(ffile.meta[key], None, "%s %s is None" % (file, key))
-                self.assertIsInstance(ffile.meta[key], int)
+                attr = getattr(ffile, key)
+                self.assertNotIn(attr, ('', None))
+                self.assertIsInstance(attr, int)
 
 if __name__ == '__main__':
     unittest.main()

@@ -21,6 +21,9 @@ class FFmpegSubprocess(Popen):
         self._procname = args[0][0]
         Popen.__init__(self, *args, **kwargs)
 
+    def wait(self):
+        raise SystemError("Use safe_wait(). wait() sucks. (see bug #1731717)")
+
     def safe_wait(self):
         # mimics the bahaviour of `.wait()`, but hopefully with a lot smaller
         # chance to hit Python bug #1731717 (which crashes calls to `waitpid`,
@@ -46,15 +49,48 @@ class FFmpegFile(object):
     def __init__(self, filename, exists=True):
         self.filename = filename
         if exists:
-            self.get_metadata()
+            self.meta = self.get_metadata()
 
     def get_metadata(self):
+        cull_empty = lambda d: dict((k, v) for k, v in d.items() if v not in ('', None))
+        want = set('framerate duration width height bitrate framecount'.split())
+
+        # First, try MediaInfo, as it gives better results for many files.
+        try:
+            meta = cull_empty(self._get_mediainfo_metadata())
+            missing = want.difference(meta.keys())
+        except InvalidInputError:
+            meta = dict()
+            missing = want
+
+        if missing:
+            # MediaInfo didn't provide all the information we want.
+            # Try FFprobe.
+            try:
+                meta.update(cull_empty(self._get_ffprobe_metadata()))
+            except InvalidInputError:
+                pass
+
+            still_missing = want.difference(meta.keys())
+            for key in still_missing:
+                meta[key] = None
+
+        if meta['framecount'] is None and \
+           meta['duration'] is not None and \
+           meta['framerate'] is not None:
+            # manually calculate the number of frames
+            meta['framecount'] = meta['duration'] * meta['framerate']
+
+        return meta
+
+    def _get_mediainfo_metadata(self):
+        floatint = lambda x: int(float(x))
         query = {
             'General' : {'VideoCount' : bool},
             'Video' : {
-                'FrameRate' : lambda x:int(float(x)),
+                'FrameRate' : floatint,
                 'Width' : int, 'Height' : int,
-                'Duration' : int, 'BitRate' : float,
+                'Duration' : int, 'BitRate' : floatint,
                 'FrameCount' : int
             }
         }
@@ -63,21 +99,28 @@ class FFmpegFile(object):
             raise InvalidInputError(self.filename)
 
         info = info['Video']
-        for attr in query['Video'].keys():
-            setattr(self, attr.lower(), info[attr])
+        meta = dict((key.lower(), info[key]) for key in query['Video'].keys())
+        if meta.get('bitrate') is not None:
+            meta['bitrate'] //= 1000
+        if meta.get('duration') is not None:
+            meta['duration'] //= 1000
+        return meta
 
-        if self.bitrate is not None:
-            self.bitrate /= 1000
+    def _get_ffprobe_metadata(self):
+        proc = FFmpegSubprocess(['ffprobe', self.filename], stderr=PIPE)
+        proc.safe_wait()
+        if not proc.successful():
+            proc.raise_error()
+        stderr = proc.stderr.read()
+        width, height = extract_width_and_height(stderr)
+        return {
+            'framerate' : extract_fps(stderr),
+            'duration' : extract_duration(stderr),
+            'bitrate' : extract_bitrate(stderr, unavailable=None),
+            'width' : width,
+            'height' : height
+        }
 
-        if self.duration is not None:
-            self.duration /= 1000
-
-        # XXX: Are there any cases in that this condition if fulfilled?
-        if self.framecount is None and \
-           self.duration is not None and \
-           self.framerate is not None:
-            # manually calculate the number of frames
-            self.framecount = self.duration * self.framerate
 
 class Job(object):
     process = None
@@ -119,7 +162,7 @@ class Job(object):
         if not seconds_spent:
             return -1
         average_speed = self.current_frame / seconds_spent
-        frames_left = self.original_file.framecount - self.current_frame
+        frames_left = self.original_file.meta['framecount'] - self.current_frame
         return int(frames_left // average_speed)
 
 
@@ -147,7 +190,7 @@ def job_create(original_file, result_file, audio_options=None,
 
 def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     job = job_create(original_file, result_file, *args, **kwargs)
-    if job.original_file.framecount:
+    if job.original_file.meta['framecount']:
         thread = _track_progress(job, on_progress)
         job.run()
         # IMPORTANT: We `join` the thread to ensure it has ended when this
@@ -174,9 +217,9 @@ def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
                      video_options=video_options)
     for seek in seeks:
         if callable(seek):
-            if not job.original_file.duration:
+            if not job.original_file.meta['duration']:
                 continue # we have no duration information
-            seek = seek(job.original_file.duration)
+            seek = seek(job.original_file.meta['duration'])
         job.extra_ffmpeg_args = ['-ss', str(seek)]
         job.run()
         if os.path.exists(thumbnail_file):
@@ -197,7 +240,7 @@ def _track_progress(job, progress_cb):
         # there's a chance this code is executed before `Job.__init__` is done)
         time.sleep(0.01)
     stderr = job.process.stderr
-    framecount = job.original_file.framecount
+    framecount = job.original_file.meta['framecount']
     buf = StringIO()
     while not job.process.finished() and job.progress < 100:
         buf.truncate(0)

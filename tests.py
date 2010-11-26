@@ -1,6 +1,13 @@
 import unittest
 import stupff
 
+try:
+    import json
+except ImportError:
+    import simplejson as json
+
+TESTFILES = json.load(open('test_files.json'))
+
 class UtilsTestcase(unittest.TestCase):
     def test_nice_percent(self):
         for inp, outp in (
@@ -25,6 +32,20 @@ class UtilsTestcase(unittest.TestCase):
                 outp = [round(x, digits) for x in outp]
                 w_h = [round(x, digits) for x in outp]
                 self.assertEqual(w_h, outp)
+
+    def test_files(self):
+        for file in TESTFILES['images']:
+            ffile = stupff.FFmpegFile(file)
+            for required in ['width', 'height']:
+                self.assertNotEqual(ffile.meta[required], None)
+
+        for file in TESTFILES['videos']:
+            if file.endswith('webm'): continue
+            ffile = stupff.FFmpegFile(file)
+            for key in 'width height framerate bitrate framecount duration'.split():
+                self.assertNotEqual(ffile.meta[key], '')
+                self.assertNotEqual(ffile.meta[key], None, "%s %s is None" % (file, key))
+                self.assertIsInstance(ffile.meta[key], int)
 
 if __name__ == '__main__':
     unittest.main()

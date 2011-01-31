@@ -208,7 +208,7 @@ def convert_file(original_file, result_file, on_progress, *args, **kwargs):
     return job
 
 def generate_thumbnail(original_file, thumbnail_file, seek=None, **vkwargs):
-    seeks = [lambda n:n/3, lambda n:n/2, 1]
+    seeks = [lambda n:n/3, lambda n:n/2, 1, 0]
     if seek is not None:
         seeks.insert(0, seek)
 
